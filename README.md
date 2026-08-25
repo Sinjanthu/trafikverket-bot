@@ -17,7 +17,7 @@ about the same slot every 5 minutes).
 
 - [Node.js](https://nodejs.org/) 18+
 - A Discord server where you can add a webhook (Server Settings → Integrations → Webhooks → New Webhook → copy URL)
-https://discord.com/api/webhooks/1541860830197588160/dHsevF1mYx-YYQ5Cy8AQY4v-iLnmlJNAV3Md9R1L6_3s116G4J0FcN8wiqGwXenRhc99
+
 
 ## Setup
 
@@ -29,7 +29,7 @@ cp payload.example.json payload.json
 ```
 
 ### 2. Capture your real request from the browser
-{"bookingSession":{"socialSecurityNumber":"19880309-8626","licenceId":5,"bookingModeId":0,"ignoreDebt":false,"ignoreBookingHindrance":false,"examinationTypeId":12,"excludeExaminationCategories":[],"rescheduleTypeId":0,"paymentIsActive":false,"paymentReference":"","paymentUrl":"","searchedMonths":0},"occasionBundleQuery":{"startDate":"2024-06-24T10:58:07.405Z","searchedMonths":0,"locationId":1000337,"nearbyLocationIds":[],"languageId":0,"vehicleTypeId":4,"tachographTypeId":1,"occasionChoiceId":1,"examinationTypeId":12}}
+
 
 1. Go to <https://fp.trafikverket.se/Boka/> and log in.
 2. Open DevTools (F12) → **Network** tab → filter by `Fetch/XHR`.
@@ -84,7 +84,7 @@ Options: `"automatic"`, `"manual"`, `"any"`.
 ### 5. Add your Discord webhook
 
 ```json
-"discord": { "webhookUrl": "https://discord.com/api/webhooks/1541860830197588160/dHsevF1mYx-YYQ5Cy8AQY4v-iLnmlJNAV3Md9R1L6_3s116G4J0FcN8wiqGwXenRhc99" }
+"discord": { "webhookUrl": "" }
 ```
 
 ## Running it
