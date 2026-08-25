@@ -17,6 +17,7 @@ about the same slot every 5 minutes).
 
 - [Node.js](https://nodejs.org/) 18+
 - A Discord server where you can add a webhook (Server Settings → Integrations → Webhooks → New Webhook → copy URL)
+https://discord.com/api/webhooks/1541860830197588160/dHsevF1mYx-YYQ5Cy8AQY4v-iLnmlJNAV3Md9R1L6_3s116G4J0FcN8wiqGwXenRhc99
 
 ## Setup
 
@@ -28,6 +29,7 @@ cp payload.example.json payload.json
 ```
 
 ### 2. Capture your real request from the browser
+{"bookingSession":{"socialSecurityNumber":"19880309-8626","licenceId":5,"bookingModeId":0,"ignoreDebt":false,"ignoreBookingHindrance":false,"examinationTypeId":12,"excludeExaminationCategories":[],"rescheduleTypeId":0,"paymentIsActive":false,"paymentReference":"","paymentUrl":"","searchedMonths":0},"occasionBundleQuery":{"startDate":"2024-06-24T10:58:07.405Z","searchedMonths":0,"locationId":1000337,"nearbyLocationIds":[],"languageId":0,"vehicleTypeId":4,"tachographTypeId":1,"occasionChoiceId":1,"examinationTypeId":12}}
 
 1. Go to <https://fp.trafikverket.se/Boka/> and log in.
 2. Open DevTools (F12) → **Network** tab → filter by `Fetch/XHR`.
@@ -57,7 +59,7 @@ to the `cities` array:
 
 ```json
 "cities": [
-  { "name": "Upplands Väsby", "locationId": "1234" },
+  { "name": "Upplands Väsby", "locationId": "1000337" },
   { "name": "Stockholm City", "locationId": "5678" }
 ]
 ```
@@ -82,7 +84,7 @@ Options: `"automatic"`, `"manual"`, `"any"`.
 ### 5. Add your Discord webhook
 
 ```json
-"discord": { "webhookUrl": "https://discord.com/api/webhooks/..." }
+"discord": { "webhookUrl": "https://discord.com/api/webhooks/1541860830197588160/dHsevF1mYx-YYQ5Cy8AQY4v-iLnmlJNAV3Md9R1L6_3s116G4J0FcN8wiqGwXenRhc99" }
 ```
 
 ## Running it
@@ -128,39 +130,6 @@ Every slot the bot notifies about is fingerprinted (city + date + time) and
 saved to `state.json`. You'll only be pinged once per slot — if it
 disappears (someone else books it) and a *different* one opens later,
 that's a new notification.
-
-**First run is silent by design.** The very first time you run the bot,
-`state.json` doesn't exist yet, so every currently-open slot would count as
-"new" — for a popular city that can be 100+ slots at once, and would flood
-your channel and hit Discord's rate limit. Instead, the first run quietly
-records what's currently open and notifies about nothing. From the second
-run onward, you're only notified about slots that genuinely just appeared.
-If you'd rather see everything that's open right now on the very first run,
-set `"notifyOnFirstRun": true` in `config.json`.
-
-## Does it run all the time?
-
-Only while the process is actually running — `npm run watch` (or cron)
-polls forever, but if you close the terminal / your laptop sleeps, it stops.
-To make it truly "always on" 24/7, pick one:
-
-- **Leave a terminal running** with `npm run watch` — simplest, but stops
-  if you close the terminal or shut down your machine.
-- **`pm2`** (process manager that survives terminal close and restarts on
-  crash/reboot):
-  ```bash
-  npm install -g pm2
-  pm2 start src/watch.js --name trafikverket-bot
-  pm2 save
-  pm2 startup   # follow the printed instructions to survive a reboot
-  ```
-- **A small always-on server / Raspberry Pi** running `pm2` or a systemd
-  service — the most "set and forget" option if your own computer isn't
-  always on.
-- **GitHub Actions on a cron schedule** — no machine needed at all, GitHub
-  runs it for you every 5 minutes. See the commented-out workflow idea in
-  this README's earlier draft, or ask and I'll write the exact
-  `.github/workflows/*.yml` file for this repo.
 
 ## Files
 
