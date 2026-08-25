@@ -1,0 +1,16 @@
+{
+  "name": "trafikverket-korprov-bot",
+  "version": "1.0.0",
+  "description": "Personal Discord notifier for Trafikverket Körprov (automatic) slot openings.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "debug": "DEBUG=1 node src/index.js",
+    "watch": "node src/watch.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

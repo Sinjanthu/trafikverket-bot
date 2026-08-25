@@ -1,0 +1,32 @@
+{
+  "_comment": "Copy this file to config.json and fill in the values below. See README.md for exactly where each value comes from.",
+
+  "apiUrl": "PASTE_THE_FULL_REQUEST_URL_TO_occasion-bundles_FROM_DEVTOOLS",
+
+  "cookie": "PASTE_YOUR_COOKIE_HEADER_HERE",
+
+  "locationIdField": "locationId",
+
+  "transmission": "automatic",
+
+  "notifyOnFirstRun": false,
+
+  "cities": [
+    {
+      "name": "Upplands Väsby",
+      "locationId": "PASTE_LOCATION_ID_FOR_UPPLANDS_VASBY"
+    }
+  ],
+
+  "search": {
+    "earliestDate": null,
+    "latestDate": null,
+    "_comment": "Optional ISO dates (YYYY-MM-DD). Only notify about slots inside this window. Leave both null to be notified about anything found."
+  },
+
+  "discord": {
+    "webhookUrl": "PASTE_YOUR_DISCORD_WEBHOOK_URL"
+  },
+
+  "pollIntervalMinutes": 5
+}

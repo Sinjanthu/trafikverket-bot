@@ -1,0 +1,16 @@
+steps:
+  - name: Check out repository
+    uses: actions/checkout@v4
+
+  - name: Set up Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '20'
+
+  - name: Install dependencies
+    run: npm ci || npm install
+
+  - name: Run Trafikverket Scraper
+    env:
+      DISCORD_WEBHOOK_URL: ${{ https://discord.com/api/webhooks/1541860830197588160/dHsevF1mYx-YYQ5Cy8AQY4v-iLnmlJNAV3Md9R1L6_3s116G4J0FcN8wiqGwXenRhc99 }}
+    run: node src/index.js
