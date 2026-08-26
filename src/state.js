@@ -18,7 +18,10 @@ export function loadPreviousSnapshot() {
   try {
     const arr = JSON.parse(readFileSync(STATE_PATH, "utf-8"));
     return { previous: new Set(arr), isFirstRun: false };
-  } catch {
+  } catch (err) {
+    console.error(
+      `WARNING: state.json exists but couldn't be read (${err.message}). Treating as first run - this should be rare and usually means a transient file lock (antivirus/cloud sync). If you see this on every run, something else is wrong.`
+    );
     return { previous: new Set(), isFirstRun: true };
   }
 }
