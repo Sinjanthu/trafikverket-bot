@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const STATE_PATH = path.join(ROOT, "state.json");
+const TMP_PATH = path.join(ROOT, "state.json.tmp");
 
 // state.json holds a SNAPSHOT of what was available on the last run, not an
 // ever-growing history. Each run compares "what's available now" against
@@ -27,7 +28,13 @@ export function loadPreviousSnapshot() {
 }
 
 export function saveSnapshot(keysSet) {
-  writeFileSync(STATE_PATH, JSON.stringify([...keysSet], null, 2));
+  // Write to a temp file first, then rename into place. Rename is atomic at
+  // the filesystem level, so state.json is never observable in a half-
+  // written state - this is what fixes the "Unexpected end of JSON input"
+  // truncation issue (usually caused by antivirus/cloud-sync grabbing the
+  // file mid-write on Windows).
+  writeFileSync(TMP_PATH, JSON.stringify([...keysSet], null, 2));
+  renameSync(TMP_PATH, STATE_PATH);
 }
 
 export function occasionKey(cityName, occasion) {
