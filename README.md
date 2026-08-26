@@ -18,7 +18,6 @@ about the same slot every 5 minutes).
 - [Node.js](https://nodejs.org/) 18+
 - A Discord server where you can add a webhook (Server Settings → Integrations → Webhooks → New Webhook → copy URL)
 
-
 ## Setup
 
 ### 1. Copy the example files
@@ -29,7 +28,6 @@ cp payload.example.json payload.json
 ```
 
 ### 2. Capture your real request from the browser
-
 
 1. Go to <https://fp.trafikverket.se/Boka/> and log in.
 2. Open DevTools (F12) → **Network** tab → filter by `Fetch/XHR`.
@@ -59,7 +57,7 @@ to the `cities` array:
 
 ```json
 "cities": [
-  { "name": "Upplands Väsby", "locationId": "1000337" },
+  { "name": "Upplands Väsby", "locationId": "1234" },
   { "name": "Stockholm City", "locationId": "5678" }
 ]
 ```
@@ -84,7 +82,7 @@ Options: `"automatic"`, `"manual"`, `"any"`.
 ### 5. Add your Discord webhook
 
 ```json
-"discord": { "webhookUrl": "" }
+"discord": { "webhookUrl": "https://discord.com/api/webhooks/..." }
 ```
 
 ## Running it
@@ -116,7 +114,74 @@ npm run watch
 */5 5-19 * * * cd /path/to/trafikverket-bot && node src/index.js >> bot.log 2>&1
 ```
 
-## Refreshing your session
+## Fixing a mismatched payload shape
+
+If your captured `payload.json` nests the location under a sub-object
+(Trafikverket's does, e.g. `occasionBundleQuery.locationId`), set
+`locationIdField` in `config.json` to that **dot path**, not just the bare
+key name:
+
+```json
+"locationIdField": "occasionBundleQuery.locationId"
+```
+
+Same idea for the search start date — Trafikverket's payload includes a
+`startDate` that should be "now", not whatever date happened to be current
+when you captured it in DevTools. Point `startDateField` at it and the bot
+refreshes it to the current time on every request automatically:
+
+```json
+"startDateField": "occasionBundleQuery.startDate"
+```
+
+Both support arbitrary nesting depth (`"a.b.c"`). Leave `startDateField` as
+`null` if your payload doesn't have anything like this.
+
+## Running via GitHub Actions (no computer needed)
+
+This lets the bot run in the cloud on a schedule, so you don't need to keep
+anything on at home. It's already set up at
+`.github/workflows/poll.yml` — you just need to push the project and add
+your secrets.
+
+1. **Push this project to a new GitHub repo.** `config.json`, `payload.json`,
+   and `state.json` are already git-ignored, so your cookie/personnummer/
+   webhook never get committed:
+   ```bash
+   git init
+   git add .
+   git commit -m "trafikverket bot"
+   git remote add origin https://github.com/<you>/<repo>.git
+   git push -u origin main
+   ```
+
+2. **Add two repo secrets** (Settings → Secrets and variables → Actions →
+   New repository secret):
+   - `CONFIG_JSON` — paste your entire real `config.json` file content
+     (with your real cookie, webhook URL, cities, etc.)
+   - `PAYLOAD_JSON` — paste your entire real `payload.json` file content
+
+3. That's it. The workflow runs every 5 minutes automatically once pushed.
+   To trigger a run immediately instead of waiting: repo → **Actions** tab
+   → **poll-trafikverket** → **Run workflow**.
+
+4. **State persistence across runs** is handled via `actions/cache` in the
+   workflow — it restores the previous `state.json` before running and saves
+   the updated one after, so you still only get notified once per slot, same
+   as running locally. The very first run behaves like any first run (seeds
+   silently, see above).
+
+### ⚠️ Free-tier minutes: use a public repo
+
+GitHub gives **unlimited free Actions minutes on public repos**, but only
+**2,000 minutes/month on private repos** (Free plan). A job every 5 minutes
+adds up to roughly 8,000+ minutes/month, which blows past the private-repo
+quota fast. Since none of your secrets ever appear in the code or commit
+history — only in GitHub's encrypted Secrets store, injected at runtime —
+making the repo **public** is safe and is what most people running this
+kind of scheduled bot do. If you'd rather keep it private, either bump
+`cron: "*/5 * * * *"` to something like `*/15 * * * *`, or self-host with
+`pm2` instead (see above).
 
 When you start seeing `⚠️ session cookie has probably expired` in Discord:
 
@@ -130,6 +195,39 @@ Every slot the bot notifies about is fingerprinted (city + date + time) and
 saved to `state.json`. You'll only be pinged once per slot — if it
 disappears (someone else books it) and a *different* one opens later,
 that's a new notification.
+
+**First run is silent by design.** The very first time you run the bot,
+`state.json` doesn't exist yet, so every currently-open slot would count as
+"new" — for a popular city that can be 100+ slots at once, and would flood
+your channel and hit Discord's rate limit. Instead, the first run quietly
+records what's currently open and notifies about nothing. From the second
+run onward, you're only notified about slots that genuinely just appeared.
+If you'd rather see everything that's open right now on the very first run,
+set `"notifyOnFirstRun": true` in `config.json`.
+
+## Does it run all the time?
+
+Only while the process is actually running — `npm run watch` (or cron)
+polls forever, but if you close the terminal / your laptop sleeps, it stops.
+To make it truly "always on" 24/7, pick one:
+
+- **Leave a terminal running** with `npm run watch` — simplest, but stops
+  if you close the terminal or shut down your machine.
+- **`pm2`** (process manager that survives terminal close and restarts on
+  crash/reboot):
+  ```bash
+  npm install -g pm2
+  pm2 start src/watch.js --name trafikverket-bot
+  pm2 save
+  pm2 startup   # follow the printed instructions to survive a reboot
+  ```
+- **A small always-on server / Raspberry Pi** running `pm2` or a systemd
+  service — the most "set and forget" option if your own computer isn't
+  always on.
+- **GitHub Actions on a cron schedule** — no machine needed at all, GitHub
+  runs it for you every 5 minutes. See the commented-out workflow idea in
+  this README's earlier draft, or ask and I'll write the exact
+  `.github/workflows/*.yml` file for this repo.
 
 ## Files
 

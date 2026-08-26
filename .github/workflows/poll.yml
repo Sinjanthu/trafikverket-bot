@@ -1,0 +1,47 @@
+name: poll-trafikverket
+
+on:
+  schedule:
+    # GitHub's cron scheduler is best-effort, not exact - during busy
+    # periods runs can be delayed by a few minutes. There is no way around
+    # this on the free tier.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Write config.json and payload.json from secrets
+        run: |
+          echo "$CONFIG_JSON" > config.json
+          echo "$PAYLOAD_JSON" > payload.json
+        env:
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+          PAYLOAD_JSON: ${{ secrets.PAYLOAD_JSON }}
+
+      - name: Restore state.json from cache
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          # Same key every time on purpose - we WANT to always restore the
+          # latest state.json so the bot remembers what it already notified
+          # about between runs.
+          key: trafikverket-state
+          restore-keys: trafikverket-state
+
+      - run: npm install --omit=dev
+      - run: node src/index.js
+
+      - name: Save state.json to cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: trafikverket-state-${{ github.run_id }}

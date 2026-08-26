@@ -19,6 +19,22 @@ export function loadConfig() {
   const cfg = readJson(CONFIG_PATH, "config.json");
   const payloadTemplate = readJson(PAYLOAD_PATH, "payload.json");
 
+  // GitHub Actions (or any CI) injects secrets as env vars rather than real
+  // files with real values committed to the repo. If these are set, they
+  // override whatever placeholder is in config.json/payload.json.
+  if (process.env.TRAFIKVERKET_COOKIE) cfg.cookie = process.env.TRAFIKVERKET_COOKIE;
+  if (process.env.DISCORD_WEBHOOK_URL) {
+    cfg.discord = cfg.discord || {};
+    cfg.discord.webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  }
+  if (process.env.TRAFIKVERKET_PAYLOAD_JSON) {
+    try {
+      Object.assign(payloadTemplate, JSON.parse(process.env.TRAFIKVERKET_PAYLOAD_JSON));
+    } catch {
+      throw new Error("TRAFIKVERKET_PAYLOAD_JSON env var is set but isn't valid JSON.");
+    }
+  }
+
   const missing = [];
   if (!cfg.apiUrl || cfg.apiUrl.startsWith("PASTE_")) missing.push("apiUrl");
   if (!cfg.cookie || cfg.cookie.startsWith("PASTE_")) missing.push("cookie");

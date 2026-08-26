@@ -1,12 +1,30 @@
+function setPath(obj, dotPath, value) {
+  const keys = dotPath.split(".");
+  let node = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (typeof node[keys[i]] !== "object" || node[keys[i]] === null) {
+      node[keys[i]] = {};
+    }
+    node = node[keys[i]];
+  }
+  node[keys[keys.length - 1]] = value;
+}
+
 /**
  * Sends the exact request your browser sends (captured into payload.json),
  * once per configured city, swapping in that city's locationId.
+ *
+ * locationIdField supports dot paths for nested payloads, e.g.
+ * "occasionBundleQuery.locationId" - not just top-level "locationId".
  */
 export async function fetchOccasionsForCity(cfg, payloadTemplate, city) {
-  const body = {
-    ...payloadTemplate,
-    [cfg.locationIdField || "locationId"]: city.locationId,
-  };
+  const body = JSON.parse(JSON.stringify(payloadTemplate)); // deep clone, don't mutate the template
+
+  setPath(body, cfg.locationIdField || "locationId", city.locationId);
+
+  if (cfg.startDateField) {
+    setPath(body, cfg.startDateField, new Date().toISOString());
+  }
 
   const res = await fetch(cfg.apiUrl, {
     method: "POST",

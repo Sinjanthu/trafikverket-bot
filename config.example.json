@@ -5,7 +5,9 @@
 
   "cookie": "PASTE_YOUR_COOKIE_HEADER_HERE",
 
-  "locationIdField": "locationId",
+  "locationIdField": "occasionBundleQuery.locationId",
+
+  "startDateField": "occasionBundleQuery.startDate",
 
   "transmission": "automatic",
 
