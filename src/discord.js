@@ -39,7 +39,7 @@ function buildEmbed(cityName, occasion, configuredTransmission) {
   const title = `🚗 1 new time — Körprov${label ? ` Grattis ${label}` : ""}`;
 
   const lines = [`🚗 **${[occasion.date, occasion.time].filter(Boolean).join(" ")}**`];
-  lines.push(`📍 ${occasion.locationName || cityName}`);
+  lines.push(`📍 ${cityName}`);
   const price = formatPrice(occasion.price);
   if (price) lines.push(`💰 ${price}`);
 
