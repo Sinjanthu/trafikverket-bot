@@ -1,3 +1,5 @@
+import { stockholmTimeLabel } from "./time.js";
+
 const COLOR_AUTOMATIC = 0x2ecc71; // green
 const COLOR_MANUAL = 0xe67e22; // orange
 const COLOR_UNKNOWN = 0x95a5a6; // grey
@@ -78,7 +80,7 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
 }
 
 export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookieWarning } = {}) {
-  const time = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const time = stockholmTimeLabel() + " Stockholm time";
   const lines = citySummaries.map((s) => {
     if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
     const newPart = s.newCount > 0 ? `${s.newCount} new` : "no new";

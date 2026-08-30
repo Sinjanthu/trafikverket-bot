@@ -17,10 +17,17 @@
  * while), in which case it'll wait for you to log in again same as before.
  *
  * Usage:
- *   node scripts/refresh-cookie.js            # update config.json only
- *   node scripts/refresh-cookie.js --push      # also push to the GitHub
- *                                               # Actions CONFIG_JSON secret
- *                                               # (requires `gh` authenticated)
+ *   node scripts/refresh-cookie.js               # update config.json only
+ *   node scripts/refresh-cookie.js --push         # also push to the GitHub
+ *                                                  # Actions CONFIG_JSON secret
+ *                                                  # (requires `gh` authenticated)
+ *
+ * For scheduled/unattended runs (e.g. Windows Task Scheduler), just use
+ * --push without --headless: when already logged in (the normal case),
+ * it needs zero clicks - the window opens, reloads, reads cookies, and
+ * closes itself. --headless exists but currently just hangs - Trafikverket's
+ * site seems to detect and block headless Chromium outright (page never
+ * finishes loading), so don't use it for now.
  */
 import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -41,6 +48,7 @@ const POLL_MS = 2000;
 const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes to complete BankID, if needed
 
 const shouldPush = process.argv.includes("--push");
+const headless = process.argv.includes("--headless");
 
 function buildCookieHeader(cookies) {
   return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
@@ -51,7 +59,7 @@ function isLoggedIn(cookies) {
 }
 
 async function main() {
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false });
+  const context = await chromium.launchPersistentContext(PROFILE_DIR, { headless });
   const page = context.pages()[0] || (await context.newPage());
 
   await page.goto(LOGIN_URL);
@@ -62,6 +70,13 @@ async function main() {
     console.log("Already logged in (persistent profile) - reloading to refresh the session...");
     await page.reload();
     await page.waitForLoadState("networkidle").catch(() => {});
+  } else if (headless) {
+    await context.close();
+    console.error(
+      "Not logged in and running --headless, so I can't show you a BankID prompt. Run once without --headless to log in interactively, then scheduled --headless runs will keep reusing that login."
+    );
+    process.exitCode = 1;
+    return;
   } else {
     console.log("Not logged in yet - log in with BankID in the browser window that opened...");
     const deadline = Date.now() + TIMEOUT_MS;

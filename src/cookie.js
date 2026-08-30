@@ -1,3 +1,5 @@
+import { stockholmTimeLabel } from "./time.js";
+
 /**
  * Trafikverket sets a `LoginValid=YYYY-MM-DD HH:MM` cookie at login time,
  * stating exactly when the session expires. We parse it so we can warn on
@@ -35,7 +37,7 @@ export function cookieExpiryWarning(cookieStr, { warnWithinMs = 60 * 60 * 1000 }
   if (!expiry) return null;
 
   const msRemaining = expiry.getTime() - Date.now();
-  const timeLabel = expiry.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const timeLabel = stockholmTimeLabel(expiry) + " Stockholm time";
 
   if (msRemaining <= 0) {
     return `⏰ Cookie's stated expiry (${timeLabel}) has already passed - refresh it if you start seeing session errors.`;
