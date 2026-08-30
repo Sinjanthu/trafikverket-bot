@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node src/index.js",
     "debug": "DEBUG=1 node src/index.js",
-    "watch": "node src/watch.js"
+    "watch": "node src/watch.js",
+    "refresh-cookie": "node scripts/refresh-cookie.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   },
   "engines": {
     "node": ">=18"

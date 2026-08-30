@@ -77,7 +77,7 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
-export async function notifyDiscordHeartbeat(webhookUrl, citySummaries) {
+export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookieWarning } = {}) {
   const time = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
   const lines = citySummaries.map((s) => {
     if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
@@ -85,7 +85,9 @@ export async function notifyDiscordHeartbeat(webhookUrl, citySummaries) {
     return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)`;
   });
 
-  const content = [`🔄 Checked ${time}`, ...lines].join("\n");
+  const contentLines = [`🔄 Checked ${time}`, ...lines];
+  if (cookieWarning) contentLines.push(cookieWarning);
+  const content = contentLines.join("\n");
 
   try {
     const res = await fetch(webhookUrl, {

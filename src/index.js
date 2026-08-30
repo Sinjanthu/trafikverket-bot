@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { fetchOccasionsForCity, extractOccasions, matchesTransmission, SessionExpiredError } from "./trafikverket.js";
 import { notifyDiscord, notifyDiscordError, notifyDiscordHeartbeat } from "./discord.js";
 import { loadPreviousSnapshot, saveSnapshot, occasionKey } from "./state.js";
+import { cookieExpiryWarning } from "./cookie.js";
 
 const DEBUG = process.env.DEBUG === "1";
 
@@ -54,11 +55,29 @@ async function run() {
         );
       } else if (newOnes.length > 0) {
         console.log(`[${city.name}] ${newOnes.length} new slot(s) found (of ${occasions.length} available now).`);
-        await notifyDiscord(cfg.discord.webhookUrl, {
-          cityName: city.name,
-          occasions: newOnes,
-          transmission: cfg.transmission,
-        });
+
+        const splitDate = cfg.discord.splitDate;
+        const afterWebhook = cfg.discord.afterDateWebhookUrl;
+        // Route slots after splitDate to a separate (e.g. muted) channel,
+        // instead of dropping them - only meaningful when both are set.
+        const useSplit = splitDate && afterWebhook && !afterWebhook.startsWith("PASTE_");
+        const mainOnes = useSplit ? newOnes.filter((o) => !o.date || o.date <= splitDate) : newOnes;
+        const laterOnes = useSplit ? newOnes.filter((o) => o.date && o.date > splitDate) : [];
+
+        if (mainOnes.length > 0) {
+          await notifyDiscord(cfg.discord.webhookUrl, {
+            cityName: city.name,
+            occasions: mainOnes,
+            transmission: cfg.transmission,
+          });
+        }
+        if (laterOnes.length > 0) {
+          await notifyDiscord(afterWebhook, {
+            cityName: city.name,
+            occasions: laterOnes,
+            transmission: cfg.transmission,
+          });
+        }
       } else {
         console.log(`[${city.name}] no new slots (${occasions.length} available now, all already notified).`);
       }
@@ -85,7 +104,8 @@ async function run() {
 
   saveSnapshot(currentSnapshot);
 
-  await notifyDiscordHeartbeat(cfg.discord.webhookUrl, citySummaries);
+  const cookieWarning = cookieExpiryWarning(cfg.cookie);
+  await notifyDiscordHeartbeat(cfg.discord.webhookUrl, citySummaries, { cookieWarning });
 
   if (sessionExpired) {
     await notifyDiscordError(
