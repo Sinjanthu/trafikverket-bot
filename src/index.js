@@ -58,7 +58,12 @@ async function run() {
 
       const occasions = extractOccasions(raw)
         .filter((o) => matchesTransmission(o, cfg.transmission))
-        .filter((o) => inWindow(o, cfg.search));
+        .filter((o) => inWindow(o, cfg.search))
+        // Per-city date window (in addition to the global one above) - e.g.
+        // the "other cities" group only cares about slots up to a cutoff,
+        // with no second channel to route later ones to like Upplands Väsby
+        // has, so they're excluded entirely rather than split.
+        .filter((o) => inWindow(o, city));
 
       occasions.forEach((o) => currentSnapshot.add(occasionKey(city.name, o)));
 
