@@ -105,7 +105,14 @@ async function run() {
   saveSnapshot(currentSnapshot);
 
   const cookieWarning = cookieExpiryWarning(cfg.cookie);
-  await notifyDiscordHeartbeat(cfg.discord.webhookUrl, citySummaries, { cookieWarning });
+  // Heartbeat goes to afterDateWebhookUrl (not the main channel) so the main
+  // channel stays clean - only real new-slot alerts, no every-run noise.
+  // Falls back to the main webhook if the split channel isn't configured.
+  const heartbeatWebhook =
+    cfg.discord.afterDateWebhookUrl && !cfg.discord.afterDateWebhookUrl.startsWith("PASTE_")
+      ? cfg.discord.afterDateWebhookUrl
+      : cfg.discord.webhookUrl;
+  await notifyDiscordHeartbeat(heartbeatWebhook, citySummaries, { cookieWarning });
 
   if (sessionExpired) {
     await notifyDiscordError(
