@@ -1,6 +1,6 @@
 import { loadConfig } from "./config.js";
 import { fetchOccasionsForCity, extractOccasions, matchesTransmission, SessionExpiredError } from "./trafikverket.js";
-import { notifyDiscord, notifyDiscordError } from "./discord.js";
+import { notifyDiscord, notifyDiscordError, notifyDiscordHeartbeat } from "./discord.js";
 import { loadPreviousSnapshot, saveSnapshot, occasionKey } from "./state.js";
 
 const DEBUG = process.env.DEBUG === "1";
@@ -19,6 +19,7 @@ async function run() {
   let sessionExpired = false;
 
   const currentSnapshot = new Set(); // rebuilt fresh every run from ALL currently available slots
+  const citySummaries = []; // for the every-run Discord heartbeat, regardless of whether anything new was found
 
   for (const city of cfg.cities) {
     try {
@@ -37,6 +38,12 @@ async function run() {
       occasions.forEach((o) => currentSnapshot.add(occasionKey(city.name, o)));
 
       const newOnes = occasions.filter((o) => !previous.has(occasionKey(city.name, o)));
+
+      citySummaries.push({
+        cityName: city.name,
+        availableCount: occasions.length,
+        newCount: isFirstRun && !notifyOnFirstRun ? 0 : newOnes.length,
+      });
 
       if (isFirstRun && !notifyOnFirstRun) {
         // Seed the snapshot silently so the first real run doesn't dump
@@ -59,6 +66,7 @@ async function run() {
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
         console.error(`[${city.name}] ${err.message}`);
+        citySummaries.push({ cityName: city.name, error: "session cookie expired" });
         // Don't let a failed check wipe out the snapshot for this city -
         // carry forward whatever we knew about it last time.
         for (const key of previous) {
@@ -67,6 +75,7 @@ async function run() {
       } else {
         console.error(`[${city.name}] error: ${err.message}`);
         await notifyDiscordError(cfg.discord.webhookUrl, `${city.name}: ${err.message}`);
+        citySummaries.push({ cityName: city.name, error: err.message });
         for (const key of previous) {
           if (key.startsWith(`${city.name}|`)) currentSnapshot.add(key);
         }
@@ -75,6 +84,8 @@ async function run() {
   }
 
   saveSnapshot(currentSnapshot);
+
+  await notifyDiscordHeartbeat(cfg.discord.webhookUrl, citySummaries);
 
   if (sessionExpired) {
     await notifyDiscordError(

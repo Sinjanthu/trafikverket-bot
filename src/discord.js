@@ -77,6 +77,32 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
+export async function notifyDiscordHeartbeat(webhookUrl, citySummaries) {
+  const time = new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const lines = citySummaries.map((s) => {
+    if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
+    const newPart = s.newCount > 0 ? `${s.newCount} new` : "no new";
+    return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)`;
+  });
+
+  const content = [`🔄 Checked ${time}`, ...lines].join("\n");
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) {
+      console.error(
+        `Discord heartbeat failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
+      );
+    }
+  } catch (err) {
+    console.error(`Discord heartbeat failed: ${err.message}`);
+  }
+}
+
 export async function notifyDiscordError(webhookUrl, message) {
   try {
     await fetch(webhookUrl, {
