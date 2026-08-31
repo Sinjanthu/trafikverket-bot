@@ -6,15 +6,19 @@
  * this uses its own separate profile folder instead: .playwright-profile/,
  * gitignored, lives only on this machine).
  *
- * First run: a real browser window opens using that dedicated profile and
- * waits for you to log in with BankID.
+ * First run: a real, visible browser window opens using that dedicated
+ * profile and waits for you to log in with BankID.
  *
  * Every run after that: since the profile is persistent (saved to disk),
- * it's still logged in - the script just reloads the Trafikverket page
- * (which is what actually extends the session, per observed behavior) and
- * reads the refreshed cookies. No BankID needed again unless the underlying
- * session has fully lapsed (rare - only if you don't run this for a long
- * while), in which case it'll wait for you to log in again same as before.
+ * it's still logged in - the script launches the window positioned off
+ * -screen (not headless - Trafikverket blocks real headless outright, see
+ * below - just moved somewhere you won't see it) and reloads the
+ * Trafikverket page (which is what actually extends the session, per
+ * observed behavior), then reads the refreshed cookies. No BankID needed
+ * again unless the underlying session has fully lapsed (rare - only if you
+ * don't run this for a long while), in which case it detects that, closes
+ * the off-screen window, and reopens a normal visible one for you to log
+ * into, same as the first run.
  *
  * Usage:
  *   node scripts/refresh-cookie.js               # update config.json only
@@ -58,9 +62,20 @@ function isLoggedIn(cookies) {
   return cookies.some((c) => c.name === "FpsExternalIdentity");
 }
 
+// Not headless (that's blocked outright) - just parked somewhere off the
+// visible desktop so a real, normal browser window never actually shows up.
+const OFFSCREEN_ARGS = ["--window-position=-3000,-3000"];
+
+async function launchContext(offscreen) {
+  return chromium.launchPersistentContext(PROFILE_DIR, {
+    headless,
+    args: offscreen ? OFFSCREEN_ARGS : [],
+  });
+}
+
 async function main() {
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, { headless });
-  const page = context.pages()[0] || (await context.newPage());
+  let context = await launchContext(true);
+  let page = context.pages()[0] || (await context.newPage());
 
   await page.goto(LOGIN_URL);
 
@@ -78,7 +93,12 @@ async function main() {
     process.exitCode = 1;
     return;
   } else {
-    console.log("Not logged in yet - log in with BankID in the browser window that opened...");
+    console.log("Not logged in (or session fully lapsed) - reopening a visible window for BankID login...");
+    await context.close();
+    context = await launchContext(false);
+    page = context.pages()[0] || (await context.newPage());
+    await page.goto(LOGIN_URL);
+
     const deadline = Date.now() + TIMEOUT_MS;
     let loggedIn = false;
     while (Date.now() < deadline) {
