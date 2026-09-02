@@ -84,7 +84,8 @@ export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookie
   const lines = citySummaries.map((s) => {
     if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
     const newPart = s.newCount > 0 ? `${s.newCount} new` : "no new";
-    return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)`;
+    const previewPart = s.preview?.length ? ` — ${s.preview.join(", ")}` : "";
+    return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)${previewPart}`;
   });
 
   const contentLines = [`🔄 Checked ${time}`, ...lines];

@@ -75,10 +75,18 @@ async function run() {
       // "new" the moment it's added, since it has no prior history at all.
       const cityIsFirstRun = isFirstRun || ![...previous].some((k) => k.startsWith(`${city.name}|`));
 
+      // Soonest 2 available slots, shown in the heartbeat as a quick preview
+      // without having to open the site.
+      const preview = [...occasions]
+        .sort((a, b) => `${a.date || ""} ${a.time || ""}`.localeCompare(`${b.date || ""} ${b.time || ""}`))
+        .slice(0, 2)
+        .map((o) => `${o.date || "?"} ${o.time || "?"}`);
+
       addSummary(heartbeatKey, {
         cityName: city.name,
         availableCount: occasions.length,
         newCount: cityIsFirstRun && !notifyOnFirstRun ? 0 : newOnes.length,
+        preview,
       });
 
       if (cityIsFirstRun && !notifyOnFirstRun) {
