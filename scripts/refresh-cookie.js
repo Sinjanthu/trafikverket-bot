@@ -64,7 +64,12 @@ function isLoggedIn(cookies) {
 
 // Not headless (that's blocked outright) - just parked somewhere off the
 // visible desktop so a real, normal browser window never actually shows up.
-const OFFSCREEN_ARGS = ["--window-position=-3000,-3000"];
+// Must stay near an ACTUAL monitor's coordinate space - a position wildly
+// outside any real display (e.g. -3000,-3000 on a 5120x1440 screen) can
+// make Chromium's GPU/compositor hang outright, which is what caused the
+// cookie-refresh task to get force-killed by Task Scheduler. Just past the
+// right edge of the real display is invisible but still "attached" to it.
+const OFFSCREEN_ARGS = ["--window-position=5130,0"];
 
 async function launchContext(offscreen) {
   return chromium.launchPersistentContext(PROFILE_DIR, {
@@ -145,4 +150,23 @@ async function main() {
   }
 }
 
-main();
+// Safety net: if anything hangs at the OS/browser-process level (e.g. a
+// GPU/compositor deadlock) rather than throwing a normal JS timeout, this
+// guarantees the process still exits on its own within a bounded time -
+// instead of hanging until Task Scheduler force-kills it (which is what
+// happened before the off-screen window position was fixed). Must stay
+// longer than TIMEOUT_MS (the legitimate interactive BankID wait), or it
+// kills a real in-progress login instead of only a genuine hang.
+const WATCHDOG_MS = TIMEOUT_MS + 30 * 1000;
+const watchdog = setTimeout(() => {
+  console.error(`\nWatchdog: still running after ${WATCHDOG_MS / 1000}s - forcing exit so the next scheduled run isn't blocked.`);
+  process.exit(1);
+}, WATCHDOG_MS);
+watchdog.unref?.(); // don't let the watchdog itself keep the process alive once main() finishes normally
+
+main()
+  .catch((err) => {
+    console.error(`Unhandled error: ${err.message}`);
+    process.exitCode = 1;
+  })
+  .finally(() => clearTimeout(watchdog));
