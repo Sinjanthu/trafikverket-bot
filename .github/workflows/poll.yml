@@ -10,6 +10,14 @@ on:
   # README.md for the cron-job.org setup (same fix fleet-scraper uses).
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
 
+# Cheap insurance: a run takes ~20-30s, comfortably under the 2-min interval
+# in use, but this queues instead of running in parallel if that ever
+# changes (a faster timer, a slower run) - same fix applied to
+# RydeuOrderPicker after finding it actually needed it there.
+concurrency:
+  group: poll-trafikverket
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
