@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy your REAL request payload here (see README step 3) and save as payload.json. This is exactly what your browser sends when you search for a Körprov - Claude does not need to know its exact shape, your browser already does.",
+  "_example_shape_only": {
+    "socialSecurityNumber": "YYYYMMDDXXXX",
+    "licenceId": 5,
+    "examinationTypeId": 12,
+    "locationId": 0,
+    "nearbyLocationIds": [],
+    "tachographTypeId": 0,
+    "vehicleTypeId": 0
+  }
+}
