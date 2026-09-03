@@ -161,9 +161,27 @@ your secrets.
      (with your real cookie, webhook URL, cities, etc.)
    - `PAYLOAD_JSON` — paste your entire real `payload.json` file content
 
-3. That's it. The workflow runs every 5 minutes automatically once pushed.
-   To trigger a run immediately instead of waiting: repo → **Actions** tab
-   → **poll-trafikverket** → **Run workflow**.
+3. The workflow only listens for `workflow_dispatch` (the manual "Run
+   workflow" button) — GitHub's own `schedule:` trigger used to be here, but
+   is documented as best-effort and was observed actually skipping runs for
+   2-4.5 hours at a stretch under load, which defeats the point of a bot
+   meant to catch a slot within minutes of it opening. Instead, an external,
+   actually-reliable timer calls the dispatch API for you:
+
+   1. Create a fine-grained PAT scoped to just this repo's Actions:
+      [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new)
+      → repository access "Only select repositories" → `trafikverket-bot` →
+      Permissions → Repository permissions → **Actions: Read and write**.
+   2. Sign up free at [cron-job.org](https://cron-job.org) and create a cronjob:
+      - URL: `https://api.github.com/repos/Sinjanthu/trafikverket-bot/actions/workflows/poll.yml/dispatches`
+      - Method: `POST`
+      - Headers: `Authorization: Bearer <token from step 1>`,
+        `Accept: application/vnd.github+json`,
+        `X-GitHub-Api-Version: 2022-11-28`
+      - Body: `{"ref":"main"}`
+      - Schedule: every 5 minutes
+   3. Confirm it worked: `gh run list --repo Sinjanthu/trafikverket-bot`
+      should show runs genuinely ~5 minutes apart, not hours.
 
 4. **State persistence across runs** is handled via `actions/cache` in the
    workflow — it restores the previous `state.json` before running and saves

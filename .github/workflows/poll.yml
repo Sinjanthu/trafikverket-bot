@@ -1,11 +1,13 @@
 name: poll-trafikverket
 
 on:
-  schedule:
-    # GitHub's cron scheduler is best-effort, not exact - during busy
-    # periods runs can be delayed by a few minutes. There is no way around
-    # this on the free tier.
-    - cron: "*/5 * * * *"
+  # GitHub's own `schedule:` trigger used to be here (*/5 * * * *) but is
+  # documented as best-effort and was observed in practice skipping runs for
+  # 2-4.5 hours at a stretch under load - useless for a slot bot where being
+  # even an hour late means someone else already took it. workflow_dispatch
+  # (the manual "Run workflow" button) is now driven by an external, actually
+  # reliable timer instead - see the "Running via GitHub Actions" section of
+  # README.md for the cron-job.org setup (same fix fleet-scraper uses).
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
 
 jobs:
