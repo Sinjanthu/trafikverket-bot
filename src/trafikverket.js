@@ -46,7 +46,18 @@ export async function fetchOccasionsForCity(cfg, payloadTemplate, city) {
   }
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} for "${city.name}": ${await res.text().catch(() => "")}`);
+    const bodyText = await res.text().catch(() => "");
+    // Trafikverket's actual expired-session response in the wild is
+    // HTTP 400 with {"type":"LoginRequiredException"} in the body, not the
+    // 401/403 checked above - without this, every poll after expiry logs a
+    // separate generic error per city instead of one clear session-expired
+    // notice, and the process never reports failure to the caller.
+    if (bodyText.includes("LoginRequiredException")) {
+      throw new SessionExpiredError(
+        `Got HTTP ${res.status} (LoginRequiredException) for "${city.name}". Your session cookie has probably expired - see README.md "Refreshing your session".`
+      );
+    }
+    throw new Error(`HTTP ${res.status} for "${city.name}": ${bodyText}`);
   }
 
   const json = await res.json();
