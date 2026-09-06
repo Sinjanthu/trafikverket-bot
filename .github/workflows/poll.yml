@@ -37,14 +37,23 @@ jobs:
           PAYLOAD_JSON: ${{ secrets.PAYLOAD_JSON }}
 
       - name: Restore state.json from cache
-        uses: actions/cache@v4
+        # actions/cache@v4 (the combined restore+save action) was used here
+        # before - its post-step auto-saves under its own `key:` whenever
+        # there wasn't already an exact hit, which on the very first-ever
+        # run created a permanent cache literally named "trafikverket-state".
+        # Every run after that got an exact hit on that one frozen cache
+        # forever, completely ignoring the real per-run caches the explicit
+        # save step below was creating - so the bot silently treated every
+        # single run as "first run" from day one, never actually detecting
+        # new slots. actions/cache/restore@v4 only restores, never auto
+        # -saves, so this can't happen again.
+        uses: actions/cache/restore@v4
         with:
           path: state.json
-          # Same key every time on purpose - we WANT to always restore the
-          # latest state.json so the bot remembers what it already notified
-          # about between runs.
           key: trafikverket-state
-          restore-keys: trafikverket-state
+          # Prefix match against the unique per-run keys the save step
+          # below creates - this is what actually finds the latest state.
+          restore-keys: trafikverket-state-
 
       - run: npm install --omit=dev
       - run: node src/index.js
