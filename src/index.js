@@ -57,6 +57,11 @@ async function run() {
       }
 
       const occasions = extractOccasions(raw)
+        // The API mixes in results from payload.json's nearbyLocationIds
+        // alongside the requested city - without this filter, a city's
+        // count (and worse, its "new slot" alerts) can silently include
+        // slots that only actually exist at a different, nearby location.
+        .filter((o) => String(o._source?.locationId) === String(city.locationId))
         .filter((o) => matchesTransmission(o, cfg.transmission))
         .filter((o) => inWindow(o, cfg.search))
         // Per-city date window (in addition to the global one above) - e.g.

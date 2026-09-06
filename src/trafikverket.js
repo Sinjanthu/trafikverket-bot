@@ -16,11 +16,20 @@ function setPath(obj, dotPath, value) {
  *
  * locationIdField supports dot paths for nested payloads, e.g.
  * "occasionBundleQuery.locationId" - not just top-level "locationId".
+ *
+ * city.examinationTypeId optionally overrides the exam type for just this
+ * entry (e.g. 3 for Kunskapsprov/theory vs the payload's default 12 for
+ * Körprov/driving) - lets one config track both exam types per location.
  */
 export async function fetchOccasionsForCity(cfg, payloadTemplate, city) {
   const body = JSON.parse(JSON.stringify(payloadTemplate)); // deep clone, don't mutate the template
 
   setPath(body, cfg.locationIdField || "locationId", city.locationId);
+
+  if (city.examinationTypeId !== undefined) {
+    setPath(body, "occasionBundleQuery.examinationTypeId", city.examinationTypeId);
+    setPath(body, "bookingSession.examinationTypeId", city.examinationTypeId);
+  }
 
   if (cfg.startDateField) {
     setPath(body, cfg.startDateField, new Date().toISOString());
