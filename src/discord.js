@@ -36,9 +36,9 @@ function formatPrice(price) {
   return String(price);
 }
 
-function buildEmbed(cityName, occasion, configuredTransmission) {
+function buildEmbed(cityName, occasion, configuredTransmission, examLabel) {
   const label = transmissionLabel(occasion, configuredTransmission);
-  const title = `🚗 1 new time — Körprov${label ? ` Grattis ${label}` : ""}`;
+  const title = `🚗 1 new time — ${examLabel}${label ? ` Grattis ${label}` : ""}`;
 
   const lines = [`🚗 **${[occasion.date, occasion.time].filter(Boolean).join(" ")}**`];
   lines.push(`📍 ${cityName}`);
@@ -54,17 +54,33 @@ function buildEmbed(cityName, occasion, configuredTransmission) {
   };
 }
 
-export async function notifyDiscord(webhookUrl, { cityName, occasions, transmission }) {
+const URGENT_WITHIN_DAYS = 5;
+
+function isUrgent(occasion) {
+  if (!occasion.date) return false;
+  const target = new Date(`${occasion.date}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return false;
+  const diffDays = (target.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  return diffDays <= URGENT_WITHIN_DAYS;
+}
+
+export async function notifyDiscord(webhookUrl, { cityName, occasions, transmission, examLabel = "Körprov" }) {
   if (occasions.length === 0) return;
 
-  const embeds = occasions.map((o) => buildEmbed(cityName, o, transmission));
+  const embeds = occasions.map((o) => buildEmbed(cityName, o, transmission, examLabel));
+  // @everyone only for genuinely new slots happening soon - not on every
+  // heartbeat, and not for far-future openings months out.
+  const urgent = occasions.some(isUrgent);
 
   for (let i = 0; i < embeds.length; i += MAX_EMBEDS_PER_MESSAGE) {
     const batch = embeds.slice(i, i + MAX_EMBEDS_PER_MESSAGE);
+    const body = { embeds: batch };
+    if (urgent && i === 0) body.content = "@everyone";
+
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ embeds: batch }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -79,7 +95,7 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
-export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookieWarning } = {}) {
+export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookieWarning, examLabel = "Körprov" } = {}) {
   const time = stockholmTimeLabel() + " Stockholm time";
   const lines = citySummaries.map((s) => {
     if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
@@ -88,7 +104,7 @@ export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookie
     return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)${previewPart}`;
   });
 
-  const contentLines = [`🔄 Checked ${time}`, ...lines];
+  const contentLines = [`🔄 Checked ${examLabel} ${time}`, ...lines];
   if (cookieWarning) contentLines.push(cookieWarning);
   const content = contentLines.join("\n");
 

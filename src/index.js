@@ -26,26 +26,27 @@ async function run() {
   const currentSnapshot = new Set(); // rebuilt fresh every run from ALL currently available slots
 
   // Heartbeat lines are grouped per destination webhook - cities with their
-  // own dedicated webhookUrl get their own heartbeat message, separate from
-  // the default one covering cities that use the main/split webhooks.
-  const defaultHeartbeatWebhook = isRealUrl(cfg.discord.afterDateWebhookUrl)
-    ? cfg.discord.afterDateWebhookUrl
-    : cfg.discord.webhookUrl;
-  const heartbeatGroups = new Map(); // webhookUrl -> citySummary[]
+  // own dedicated webhookUrl (e.g. the Kunskapsprov entries) get their own
+  // heartbeat message there; everything else falls back to the main webhook.
+  const heartbeatGroups = new Map(); // webhookUrl -> { examLabel, summaries[] }
 
-  function addSummary(webhookUrl, summary) {
-    if (!heartbeatGroups.has(webhookUrl)) heartbeatGroups.set(webhookUrl, []);
-    heartbeatGroups.get(webhookUrl).push(summary);
+  function addSummary(webhookUrl, examLabel, summary) {
+    if (!heartbeatGroups.has(webhookUrl)) heartbeatGroups.set(webhookUrl, { examLabel, summaries: [] });
+    heartbeatGroups.get(webhookUrl).summaries.push(summary);
   }
 
   for (const city of cfg.cities) {
-    // A city can have its own dedicated webhookUrl (routes all of that
-    // city's notifications - alerts and heartbeat - to its own channel,
-    // bypassing the main/split-by-date logic entirely). Falls back to the
-    // shared main webhook when the city has none of its own.
+    // A city can have its own dedicated webhookUrl (e.g. the Kunskapsprov
+    // entries, routed to the theory-test channel) - everything for that
+    // city (heartbeat, alerts, errors) goes there. Falls back to the main
+    // webhook (the Körprov channel) when the city has none of its own.
     const cityWebhook = isRealUrl(city.webhookUrl) ? city.webhookUrl : null;
-    const errorWebhook = cityWebhook || cfg.discord.webhookUrl;
-    const heartbeatKey = cityWebhook || defaultHeartbeatWebhook;
+    const targetWebhook = cityWebhook || cfg.discord.webhookUrl;
+    const examLabel = city.examinationTypeId === 3 ? "Kunskapsprov" : "Körprov";
+    // city.name stays the unique tracking key (avoids state.json collisions
+    // between e.g. "Upplands Väsby" Körprov and Kunskapsprov entries sharing
+    // the same city) - displayName is just what shows up in Discord.
+    const displayName = city.displayName || city.name;
 
     try {
       // Full check of everything currently available for this city, every run.
@@ -87,8 +88,8 @@ async function run() {
         .slice(0, 2)
         .map((o) => `${o.date || "?"} ${o.time || "?"}`);
 
-      addSummary(heartbeatKey, {
-        cityName: city.name,
+      addSummary(targetWebhook, examLabel, {
+        cityName: displayName,
         availableCount: occasions.length,
         newCount: cityIsFirstRun && !notifyOnFirstRun ? 0 : newOnes.length,
         preview,
@@ -104,38 +105,14 @@ async function run() {
       } else if (newOnes.length > 0) {
         console.log(`[${city.name}] ${newOnes.length} new slot(s) found (of ${occasions.length} available now).`);
 
-        if (cityWebhook) {
-          // Dedicated city webhook - no date-based splitting, everything
-          // for this city goes to its own channel.
-          await notifyDiscord(cityWebhook, {
-            cityName: city.name,
-            occasions: newOnes,
-            transmission: cfg.transmission,
-          });
-        } else {
-          const splitDate = cfg.discord.splitDate;
-          const afterWebhook = cfg.discord.afterDateWebhookUrl;
-          // Route slots after splitDate to a separate (e.g. muted) channel,
-          // instead of dropping them - only meaningful when both are set.
-          const useSplit = splitDate && isRealUrl(afterWebhook);
-          const mainOnes = useSplit ? newOnes.filter((o) => !o.date || o.date <= splitDate) : newOnes;
-          const laterOnes = useSplit ? newOnes.filter((o) => o.date && o.date > splitDate) : [];
-
-          if (mainOnes.length > 0) {
-            await notifyDiscord(cfg.discord.webhookUrl, {
-              cityName: city.name,
-              occasions: mainOnes,
-              transmission: cfg.transmission,
-            });
-          }
-          if (laterOnes.length > 0) {
-            await notifyDiscord(afterWebhook, {
-              cityName: city.name,
-              occasions: laterOnes,
-              transmission: cfg.transmission,
-            });
-          }
-        }
+        // Exam type decides the channel now, not date - Körprov cities go to
+        // the main webhook, Kunskapsprov cities to their own (via cityWebhook).
+        await notifyDiscord(targetWebhook, {
+          cityName: displayName,
+          occasions: newOnes,
+          transmission: cfg.transmission,
+          examLabel,
+        });
       } else {
         console.log(`[${city.name}] no new slots (${occasions.length} available now, all already notified).`);
       }
@@ -143,7 +120,7 @@ async function run() {
       if (err instanceof SessionExpiredError) {
         sessionExpired = true;
         console.error(`[${city.name}] ${err.message}`);
-        addSummary(heartbeatKey, { cityName: city.name, error: "session cookie expired" });
+        addSummary(targetWebhook, examLabel, { cityName: displayName, error: "session cookie expired" });
         // Don't let a failed check wipe out the snapshot for this city -
         // carry forward whatever we knew about it last time.
         for (const key of previous) {
@@ -151,8 +128,8 @@ async function run() {
         }
       } else {
         console.error(`[${city.name}] error: ${err.message}`);
-        await notifyDiscordError(errorWebhook, `${city.name}: ${err.message}`);
-        addSummary(heartbeatKey, { cityName: city.name, error: err.message });
+        await notifyDiscordError(targetWebhook, `${city.name}: ${err.message}`);
+        addSummary(targetWebhook, examLabel, { cityName: displayName, error: err.message });
         for (const key of previous) {
           if (key.startsWith(`${city.name}|`)) currentSnapshot.add(key);
         }
@@ -165,8 +142,8 @@ async function run() {
   // The shared session cookie affects every city equally, so every
   // heartbeat group gets the same expiry warning.
   const cookieWarning = cookieExpiryWarning(cfg.cookie);
-  for (const [webhookUrl, summaries] of heartbeatGroups) {
-    await notifyDiscordHeartbeat(webhookUrl, summaries, { cookieWarning });
+  for (const [webhookUrl, { examLabel, summaries }] of heartbeatGroups) {
+    await notifyDiscordHeartbeat(webhookUrl, summaries, { cookieWarning, examLabel });
   }
 
   if (sessionExpired) {
