@@ -7,3 +7,4 @@ bot.log
 cookie-warning-state.json
 .playwright-profile-manual/
 throttle-state.json
+openbrowser-bot.log
