@@ -4,3 +4,4 @@ payload.json
 state.json
 bot.log
 .playwright-profile/
+cookie-warning-state.json

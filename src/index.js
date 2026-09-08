@@ -1,6 +1,6 @@
 import { loadConfig } from "./config.js";
 import { fetchOccasionsForCity, extractOccasions, matchesTransmission, SessionExpiredError } from "./trafikverket.js";
-import { notifyDiscord, notifyDiscordError, notifyDiscordHeartbeat } from "./discord.js";
+import { notifyDiscord, notifyDiscordError, notifyDiscordCookieWarning } from "./discord.js";
 import { loadPreviousSnapshot, saveSnapshot, occasionKey } from "./state.js";
 import { cookieExpiryWarning } from "./cookie.js";
 
@@ -139,11 +139,15 @@ async function run() {
 
   saveSnapshot(currentSnapshot);
 
-  // The shared session cookie affects every city equally, so every
-  // heartbeat group gets the same expiry warning.
+  // No more routine "Checked..." status message every run - only genuinely
+  // new slots post (via notifyDiscord above). The cookie-expiry warning is
+  // the one thing still worth surfacing on its own, but only while it's
+  // actually close to expiring, not on every check.
   const cookieWarning = cookieExpiryWarning(cfg.cookie);
-  for (const [webhookUrl, { examLabel, summaries }] of heartbeatGroups) {
-    await notifyDiscordHeartbeat(webhookUrl, summaries, { cookieWarning, examLabel });
+  if (cookieWarning) {
+    for (const [webhookUrl] of heartbeatGroups) {
+      await notifyDiscordCookieWarning(webhookUrl, cookieWarning);
+    }
   }
 
   if (sessionExpired) {

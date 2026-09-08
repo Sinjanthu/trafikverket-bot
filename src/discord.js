@@ -1,5 +1,3 @@
-import { stockholmTimeLabel } from "./time.js";
-
 const COLOR_AUTOMATIC = 0x2ecc71; // green
 const COLOR_MANUAL = 0xe67e22; // orange
 const COLOR_UNKNOWN = 0x95a5a6; // grey
@@ -95,32 +93,20 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
-export async function notifyDiscordHeartbeat(webhookUrl, citySummaries, { cookieWarning, examLabel = "Körprov" } = {}) {
-  const time = stockholmTimeLabel() + " Stockholm time";
-  const lines = citySummaries.map((s) => {
-    if (s.error) return `⚠️ ${s.cityName}: ${s.error}`;
-    const newPart = s.newCount > 0 ? `${s.newCount} new` : "no new";
-    const previewPart = s.preview?.length ? ` — ${s.preview.join(", ")}` : "";
-    return `${s.newCount > 0 ? "🚗" : "✅"} ${s.cityName}: ${newPart} (${s.availableCount} available)${previewPart}`;
-  });
-
-  const contentLines = [`🔄 Checked ${examLabel} ${time}`, ...lines];
-  if (cookieWarning) contentLines.push(cookieWarning);
-  const content = contentLines.join("\n");
-
+export async function notifyDiscordCookieWarning(webhookUrl, cookieWarning) {
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content: cookieWarning }),
     });
     if (!res.ok) {
       console.error(
-        `Discord heartbeat failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
+        `Discord cookie-warning post failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
       );
     }
   } catch (err) {
-    console.error(`Discord heartbeat failed: ${err.message}`);
+    console.error(`Discord cookie-warning post failed: ${err.message}`);
   }
 }
 

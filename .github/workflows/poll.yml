@@ -49,7 +49,12 @@ jobs:
         # -saves, so this can't happen again.
         uses: actions/cache/restore@v4
         with:
-          path: state.json
+          # cookie-warning-state.json travels alongside state.json so the
+          # "only warn once per expiry" throttling (not just the "only
+          # notify once per slot" logic) also persists across cloud runs.
+          path: |
+            state.json
+            cookie-warning-state.json
           key: trafikverket-state
           # Prefix match against the unique per-run keys the save step
           # below creates - this is what actually finds the latest state.
@@ -62,5 +67,7 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: state.json
+          path: |
+            state.json
+            cookie-warning-state.json
           key: trafikverket-state-${{ github.run_id }}
