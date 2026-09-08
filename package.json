@@ -9,7 +9,8 @@
     "debug": "DEBUG=1 node src/index.js",
     "watch": "node src/watch.js",
     "refresh-cookie": "node scripts/refresh-cookie.js",
-    "refresh-cookie:auto": "node scripts/refresh-cookie.js --push"
+    "refresh-cookie:auto": "node scripts/refresh-cookie.js --push",
+    "open-browser-bot": "node scripts/discord-open-browser-bot.js"
   },
   "devDependencies": {
     "playwright": "^1.62.1"
@@ -17,5 +18,8 @@
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.27.0"
+  }
 }

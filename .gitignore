@@ -5,3 +5,5 @@ state.json
 bot.log
 .playwright-profile/
 cookie-warning-state.json
+.playwright-profile-manual/
+throttle-state.json

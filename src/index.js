@@ -1,8 +1,13 @@
 import { loadConfig } from "./config.js";
 import { fetchOccasionsForCity, extractOccasions, matchesTransmission, SessionExpiredError } from "./trafikverket.js";
-import { notifyDiscord, notifyDiscordError, notifyDiscordCookieWarning } from "./discord.js";
+import { notifyDiscord, notifyDiscordError, notifyDiscordCookieWarning, notifyDiscordPeriodicSummary } from "./discord.js";
 import { loadPreviousSnapshot, saveSnapshot, occasionKey } from "./state.js";
 import { cookieExpiryWarning } from "./cookie.js";
+import { isDue, markDone } from "./throttle.js";
+import { stockholmTimeLabel } from "./time.js";
+
+const TEORIPROV_SUMMARY_KEY = "teoriprov-periodic-summary";
+const TEORIPROV_SUMMARY_INTERVAL_MS = 5 * 60 * 1000;
 
 const DEBUG = process.env.DEBUG === "1";
 
@@ -24,6 +29,7 @@ async function run() {
   let sessionExpired = false;
 
   const currentSnapshot = new Set(); // rebuilt fresh every run from ALL currently available slots
+  const teoriprovBlocks = []; // collected during the loop below, posted as one throttled periodic summary after
 
   // Heartbeat lines are grouped per destination webhook - cities with their
   // own dedicated webhookUrl (e.g. the Kunskapsprov entries) get their own
@@ -95,6 +101,14 @@ async function run() {
         preview,
       });
 
+      if (city.examinationTypeId === 3) {
+        const first5 = [...occasions]
+          .sort((a, b) => `${a.date || ""} ${a.time || ""}`.localeCompare(`${b.date || ""} ${b.time || ""}`))
+          .slice(0, 5)
+          .map((o) => `${o.date || "?"} ${o.time || "?"}`);
+        teoriprovBlocks.push({ cityName: displayName, availableCount: occasions.length, first5 });
+      }
+
       if (cityIsFirstRun && !notifyOnFirstRun) {
         // Seed the snapshot silently so the first real run doesn't dump
         // every currently-open slot at once. Set notifyOnFirstRun:true in
@@ -138,6 +152,18 @@ async function run() {
   }
 
   saveSnapshot(currentSnapshot);
+
+  // Periodic "here's what's open" digest for the Teoriprov channel - fires
+  // at most every 5 min regardless of how often the bot itself runs, and
+  // deliberately never pings @everyone (that's reserved for genuinely new,
+  // soon slots via the alert path above) so it can't spam the channel.
+  if (teoriprovBlocks.length > 0 && isDue(TEORIPROV_SUMMARY_KEY, TEORIPROV_SUMMARY_INTERVAL_MS)) {
+    await notifyDiscordPeriodicSummary(cfg.discord.afterDateWebhookUrl, {
+      title: `📘 Kunskapsprov (teoriprov) availability — ${stockholmTimeLabel()} Stockholm time`,
+      cityBlocks: teoriprovBlocks,
+    });
+    markDone(TEORIPROV_SUMMARY_KEY);
+  }
 
   // No more routine "Checked..." status message every run - only genuinely
   // new slots post (via notifyDiscord above). The cookie-expiry warning is

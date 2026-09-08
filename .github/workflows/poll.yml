@@ -55,6 +55,7 @@ jobs:
           path: |
             state.json
             cookie-warning-state.json
+            throttle-state.json
           key: trafikverket-state
           # Prefix match against the unique per-run keys the save step
           # below creates - this is what actually finds the latest state.
@@ -70,4 +71,5 @@ jobs:
           path: |
             state.json
             cookie-warning-state.json
+            throttle-state.json
           key: trafikverket-state-${{ github.run_id }}

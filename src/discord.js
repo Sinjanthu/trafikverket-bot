@@ -93,6 +93,33 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
+// Periodic "here's what's open right now" digest - deliberately plain
+// content, never an @everyone ping (unlike the new-slot alerts), since it
+// fires on a timer regardless of whether anything actually changed.
+export async function notifyDiscordPeriodicSummary(webhookUrl, { title, cityBlocks }) {
+  const lines = [title];
+  for (const { cityName, availableCount, first5 } of cityBlocks) {
+    lines.push(`\n📍 **${cityName}**: ${availableCount} available`);
+    lines.push(`First 5: ${first5.join(", ") || "none"}`);
+  }
+  const content = lines.join("\n");
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) {
+      console.error(
+        `Discord periodic summary post failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
+      );
+    }
+  } catch (err) {
+    console.error(`Discord periodic summary post failed: ${err.message}`);
+  }
+}
+
 export async function notifyDiscordCookieWarning(webhookUrl, cookieWarning) {
   try {
     const res = await fetch(webhookUrl, {
