@@ -12,7 +12,16 @@ function readJson(p, label) {
       `${label} not found at ${p}. See README.md's Setup section - you need to copy the .example file and fill it in.`
     );
   }
-  return JSON.parse(readFileSync(p, "utf-8"));
+  const raw = readFileSync(p, "utf-8");
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    // Most likely cause: another process (e.g. refresh-cookie.js) was
+    // mid-write when this ran. That write is now atomic (temp file +
+    // rename) specifically to prevent this, but keeping this message in
+    // case some other writer isn't.
+    throw new Error(`${label} isn't valid JSON (${err.message}) - possibly caught mid-write by another process.`);
+  }
 }
 
 export function loadConfig() {

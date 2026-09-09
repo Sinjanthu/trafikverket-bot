@@ -34,7 +34,7 @@
  * finishes loading), so don't use it for now.
  */
 import { chromium } from "playwright";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -129,7 +129,13 @@ async function main() {
 
   const cfg = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
   cfg.cookie = cookieHeader;
-  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+  // Write to a temp file then rename (atomic) - the poll task runs every 5
+  // min and can land within the same minute as this refresh (every 20 min),
+  // so a plain writeFileSync risks the poller reading a half-written file
+  // and crashing on a JSON parse error. Same fix state.js already uses.
+  const tmpPath = CONFIG_PATH + ".tmp";
+  writeFileSync(tmpPath, JSON.stringify(cfg, null, 2) + "\n");
+  renameSync(tmpPath, CONFIG_PATH);
   console.log(`Updated cookie in ${CONFIG_PATH}`);
 
   if (shouldPush) {
