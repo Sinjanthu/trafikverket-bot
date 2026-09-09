@@ -56,7 +56,14 @@ async function ensureBrowserReady() {
   if (!isLoggedIn(cookies)) {
     console.log("Not logged in on the dedicated manual-open profile - relaunching visibly for BankID login...");
     await context.close();
-    context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false });
+    // Chromium persists window bounds per-profile - without explicitly
+    // forcing an on-screen position here, it can silently restore the
+    // off-screen position from the first launch above, leaving the window
+    // impossible to find even though it's technically "visible".
+    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+      headless: false,
+      args: [`--window-position=${ONSCREEN_BOUNDS.left},${ONSCREEN_BOUNDS.top}`, `--window-size=${ONSCREEN_BOUNDS.width},${ONSCREEN_BOUNDS.height}`],
+    });
     page = context.pages()[0] || (await context.newPage());
     await page.goto(BOOKING_URL);
 
