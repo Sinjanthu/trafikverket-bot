@@ -45,10 +45,26 @@ function isLoggedIn(cookies) {
   return cookies.some((c) => c.name === "FpsExternalIdentity");
 }
 
+function watchForManualClose(ctx) {
+  // If the user closes the browser window themselves (e.g. after booking),
+  // this connection goes stale - without detecting that, the next
+  // /openbrowser would just fail instead of relaunching. Cookies/login
+  // persist to disk regardless (a normal browser close doesn't log you
+  // out), so relaunching just reopens the same still-logged-in profile.
+  ctx.on("close", () => {
+    console.log("Manual-open browser was closed - will relaunch on next /openbrowser.");
+    if (context === ctx) {
+      context = null;
+      page = null;
+    }
+  });
+}
+
 async function ensureBrowserReady() {
   if (context) return;
 
   context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, args: OFFSCREEN_ARGS });
+  watchForManualClose(context);
   page = context.pages()[0] || (await context.newPage());
   await page.goto(BOOKING_URL);
 
@@ -64,6 +80,7 @@ async function ensureBrowserReady() {
       headless: false,
       args: [`--window-position=${ONSCREEN_BOUNDS.left},${ONSCREEN_BOUNDS.top}`, `--window-size=${ONSCREEN_BOUNDS.width},${ONSCREEN_BOUNDS.height}`],
     });
+    watchForManualClose(context);
     page = context.pages()[0] || (await context.newPage());
     await page.goto(BOOKING_URL);
 
