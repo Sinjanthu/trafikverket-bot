@@ -54,7 +54,7 @@ function buildEmbed(cityName, occasion, configuredTransmission, examLabel) {
 
 const URGENT_WITHIN_DAYS = 5;
 
-function isUrgent(occasion) {
+export function isUrgent(occasion) {
   if (!occasion.date) return false;
   const target = new Date(`${occasion.date}T00:00:00`);
   if (Number.isNaN(target.getTime())) return false;
@@ -93,11 +93,14 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   }
 }
 
-// Periodic "here's what's open right now" digest - deliberately plain
-// content, never an @everyone ping (unlike the new-slot alerts), since it
-// fires on a timer regardless of whether anything actually changed.
-export async function notifyDiscordPeriodicSummary(webhookUrl, { title, cityBlocks }) {
-  const lines = [title];
+// Periodic "here's what's open right now" digest - plain content UNLESS at
+// least one currently-listed slot is within URGENT_WITHIN_DAYS, in which
+// case it pings @everyone same as a fresh new-slot alert would. Since this
+// recomputes fresh every ~5 min, that ping naturally repeats every cycle
+// for as long as an urgent slot keeps showing up, and just as naturally
+// stops the moment it's gone (booked/removed) - no separate tracking needed.
+export async function notifyDiscordPeriodicSummary(webhookUrl, { title, cityBlocks, urgent }) {
+  const lines = urgent ? ["@everyone", title] : [title];
   for (const { cityName, availableCount, first5 } of cityBlocks) {
     lines.push(`\n📍 **${cityName}**: ${availableCount} available`);
     lines.push(`First 5: ${first5.join(", ") || "none"}`);

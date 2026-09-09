@@ -1,6 +1,6 @@
 import { loadConfig } from "./config.js";
 import { fetchOccasionsForCity, extractOccasions, matchesTransmission, SessionExpiredError } from "./trafikverket.js";
-import { notifyDiscord, notifyDiscordError, notifyDiscordCookieWarning, notifyDiscordPeriodicSummary } from "./discord.js";
+import { notifyDiscord, notifyDiscordError, notifyDiscordCookieWarning, notifyDiscordPeriodicSummary, isUrgent } from "./discord.js";
 import { loadPreviousSnapshot, saveSnapshot, occasionKey } from "./state.js";
 import { cookieExpiryWarning } from "./cookie.js";
 import { isDue, markDone } from "./throttle.js";
@@ -106,7 +106,12 @@ async function run() {
           .sort((a, b) => `${a.date || ""} ${a.time || ""}`.localeCompare(`${b.date || ""} ${b.time || ""}`))
           .slice(0, 5)
           .map((o) => `${o.date || "?"} ${o.time || "?"}`);
-        teoriprovBlocks.push({ cityName: displayName, availableCount: occasions.length, first5 });
+        teoriprovBlocks.push({
+          cityName: displayName,
+          availableCount: occasions.length,
+          first5,
+          hasUrgent: occasions.some(isUrgent),
+        });
       }
 
       if (cityIsFirstRun && !notifyOnFirstRun) {
@@ -161,6 +166,7 @@ async function run() {
     await notifyDiscordPeriodicSummary(cfg.discord.afterDateWebhookUrl, {
       title: `📘 Kunskapsprov (teoriprov) availability — ${stockholmTimeLabel()} Stockholm time`,
       cityBlocks: teoriprovBlocks,
+      urgent: teoriprovBlocks.some((b) => b.hasUrgent),
     });
     markDone(TEORIPROV_SUMMARY_KEY);
   }
