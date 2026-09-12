@@ -48,6 +48,7 @@ async function run() {
     // webhook (the Körprov channel) when the city has none of its own.
     const cityWebhook = isRealUrl(city.webhookUrl) ? city.webhookUrl : null;
     const targetWebhook = cityWebhook || cfg.discord.webhookUrl;
+    const targetChannelId = city.channelId || cfg.discord.channelId;
     const examLabel = city.examinationTypeId === 3 ? "Kunskapsprov" : "Körprov";
     // city.name stays the unique tracking key (avoids state.json collisions
     // between e.g. "Upplands Väsby" Körprov and Kunskapsprov entries sharing
@@ -131,6 +132,8 @@ async function run() {
           occasions: newOnes,
           transmission: cfg.transmission,
           examLabel,
+          botToken: cfg.discordBot?.token,
+          channelId: targetChannelId,
         });
       } else {
         console.log(`[${city.name}] no new slots (${occasions.length} available now, all already notified).`);

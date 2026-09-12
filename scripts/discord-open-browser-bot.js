@@ -51,56 +51,78 @@ function watchForManualClose(ctx) {
   // /openbrowser would just fail instead of relaunching. Cookies/login
   // persist to disk regardless (a normal browser close doesn't log you
   // out), so relaunching just reopens the same still-logged-in profile.
+  // Only ever attached to the ONE context we're actually keeping (see
+  // ensureBrowserReady) - never to a short-lived probe launch we might
+  // discard, so there's no ambiguity about whether a given close event is
+  // "ours" or a genuine manual close.
   ctx.on("close", () => {
     console.log("Manual-open browser was closed - will relaunch on next /openbrowser.");
-    if (context === ctx) {
-      context = null;
-      page = null;
-    }
+    context = null;
+    page = null;
   });
 }
 
+let inFlightLaunch = null;
+
+// Concurrency guard: without this, two overlapping triggers (e.g. clicking
+// /openbrowser again while the first call is still waiting on BankID) would
+// both call launchPersistentContext on the same profile dir at once, which
+// Playwright rejects outright ("Opening in existing browser session") -
+// that's exactly what crashed the bot once already (see the interaction
+// handler's error-length fix above for the other half of that incident).
 async function ensureBrowserReady() {
   if (context) return;
+  if (inFlightLaunch) return inFlightLaunch;
 
-  context = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, args: OFFSCREEN_ARGS });
-  watchForManualClose(context);
-  page = context.pages()[0] || (await context.newPage());
-  await page.goto(BOOKING_URL);
+  inFlightLaunch = ensureBrowserReadyInner().finally(() => {
+    inFlightLaunch = null;
+  });
+  return inFlightLaunch;
+}
 
-  let cookies = await context.cookies();
+async function ensureBrowserReadyInner() {
+  // Local variables until we know which context we're actually keeping -
+  // the module-level context/page (and the close-watcher) only get set
+  // once, on whichever one survives below.
+  let ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, args: OFFSCREEN_ARGS });
+  let pg = ctx.pages()[0] || (await ctx.newPage());
+  await pg.goto(BOOKING_URL);
+
+  let cookies = await ctx.cookies();
   if (!isLoggedIn(cookies)) {
     console.log("Not logged in on the dedicated manual-open profile - relaunching visibly for BankID login...");
-    await context.close();
+    await ctx.close();
     // Chromium persists window bounds per-profile - without explicitly
     // forcing an on-screen position here, it can silently restore the
     // off-screen position from the first launch above, leaving the window
     // impossible to find even though it's technically "visible".
-    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+    ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
       headless: false,
       args: [`--window-position=${ONSCREEN_BOUNDS.left},${ONSCREEN_BOUNDS.top}`, `--window-size=${ONSCREEN_BOUNDS.width},${ONSCREEN_BOUNDS.height}`],
     });
-    watchForManualClose(context);
-    page = context.pages()[0] || (await context.newPage());
-    await page.goto(BOOKING_URL);
+    pg = ctx.pages()[0] || (await ctx.newPage());
+    await pg.goto(BOOKING_URL);
 
     const deadline = Date.now() + 5 * 60 * 1000;
     while (Date.now() < deadline) {
-      cookies = await context.cookies();
+      cookies = await ctx.cookies();
       if (isLoggedIn(cookies)) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
-    if (!isLoggedIn(await context.cookies())) {
+    if (!isLoggedIn(await ctx.cookies())) {
       console.error("Timed out waiting for BankID login on startup. /openbrowser won't work until this succeeds.");
-      await context.close();
-      context = null;
+      await ctx.close();
       return;
     }
     // Park it off-screen again now that we're logged in, ready for next time.
-    const cdp = await context.newCDPSession(page);
+    const cdp = await ctx.newCDPSession(pg);
     const { windowId } = await cdp.send("Browser.getWindowForTarget");
     await cdp.send("Browser.setWindowBounds", { windowId, bounds: { left: OFFSCREEN_LEFT, top: 0 } }).catch(() => {});
   }
+
+  context = ctx;
+  page = pg;
+  watchForManualClose(context);
 
   console.log("Manual-open browser ready (logged in, parked off-screen).");
 
@@ -133,16 +155,42 @@ client.once(Events.ClientReady, () => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || interaction.commandName !== "openbrowser") return;
+  const isOpenCommand = interaction.isChatInputCommand() && interaction.commandName === "openbrowser";
+  // "Book now" button attached to new-slot alert messages (see
+  // src/discord.js) - same action as /openbrowser, just one click away
+  // from the alert itself instead of switching over to type a command.
+  const isBookButton = interaction.isButton() && interaction.customId === "book_now";
+  if (!isOpenCommand && !isBookButton) return;
   if (interaction.guildId !== guildId) return;
 
-  await interaction.reply({ content: "Opening the browser now...", ephemeral: true });
+  try {
+    await interaction.reply({ content: "Opening the browser now...", ephemeral: true });
+  } catch (err) {
+    console.error("Failed to send initial reply:", err.message);
+    return;
+  }
+
   try {
     await bringOnScreen();
     await interaction.followUp({ content: "Done - check your screen.", ephemeral: true });
   } catch (err) {
-    await interaction.followUp({ content: `Failed to open: ${err.message}`, ephemeral: true });
+    // Playwright errors can include a huge multi-line call log (well over
+    // Discord's 2000-char message limit) - sending that unmodified once
+    // crashed the whole process with an uncaught DiscordAPIError. Take just
+    // the first line and wrap the whole send in its own try/catch too.
+    const firstLine = String(err.message).split("\n")[0].slice(0, 1500);
+    try {
+      await interaction.followUp({ content: `Failed to open: ${firstLine}`, ephemeral: true });
+    } catch (sendErr) {
+      console.error("Failed to send error followUp:", sendErr.message);
+    }
   }
 });
+
+// Last-resort safety net - an uncaught error here previously took down the
+// whole listener (e.g. a Discord API error thrown outside the handler's own
+// try/catch). Log and keep running instead.
+client.on("error", (err) => console.error("Discord client error:", err.message));
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 
 client.login(token);

@@ -62,7 +62,15 @@ export function isUrgent(occasion) {
   return diffDays <= URGENT_WITHIN_DAYS;
 }
 
-export async function notifyDiscord(webhookUrl, { cityName, occasions, transmission, examLabel = "Körprov" }) {
+const BOOK_BUTTON_ROW = {
+  type: 1, // action row
+  components: [{ type: 2, style: 1, label: "📅 Book now", custom_id: "book_now" }],
+};
+
+export async function notifyDiscord(
+  webhookUrl,
+  { cityName, occasions, transmission, examLabel = "Körprov", botToken, channelId }
+) {
   if (occasions.length === 0) return;
 
   const embeds = occasions.map((o) => buildEmbed(cityName, o, transmission, examLabel));
@@ -70,20 +78,26 @@ export async function notifyDiscord(webhookUrl, { cityName, occasions, transmiss
   // heartbeat, and not for far-future openings months out.
   const urgent = occasions.some(isUrgent);
 
+  // Sent via the bot's own REST API (not the webhook) whenever a token and
+  // channel are configured, so the "Book now" button's click can route back
+  // to that same bot's InteractionCreate handler - a button on a plain
+  // webhook message has no application to deliver the interaction to.
+  const useBot = Boolean(botToken && channelId);
+  const url = useBot ? `https://discord.com/api/v10/channels/${channelId}/messages` : webhookUrl;
+  const headers = { "Content-Type": "application/json" };
+  if (useBot) headers.Authorization = `Bot ${botToken}`;
+
   for (let i = 0; i < embeds.length; i += MAX_EMBEDS_PER_MESSAGE) {
     const batch = embeds.slice(i, i + MAX_EMBEDS_PER_MESSAGE);
     const body = { embeds: batch };
     if (urgent && i === 0) body.content = "@everyone";
+    if (useBot) body.components = [BOOK_BUTTON_ROW];
 
-    const res = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
 
     if (!res.ok) {
       console.error(
-        `Discord webhook failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
+        `Discord ${useBot ? "bot post" : "webhook"} failed: HTTP ${res.status} ${await res.text().catch(() => "")}`
       );
     }
 
