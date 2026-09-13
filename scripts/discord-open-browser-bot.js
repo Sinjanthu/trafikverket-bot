@@ -5,12 +5,16 @@
  * background (parked off-screen, same trick as refresh-cookie.js) and, on
  * command, brings it on-screen so you can book immediately.
  *
- * Uses a SEPARATE profile from refresh-cookie.js's (.playwright-profile
- * -manual, not .playwright-profile) on purpose: this process holds its
+ * Uses a SEPARATE browser profile from refresh-cookie.js's (.playwright
+ * -profile-manual, not .playwright-profile) - this process holds its
  * browser open continuously for as long as it runs, which would otherwise
  * permanently conflict with the scheduled cookie-refresh task's periodic
- * use of the same profile. Keeps its own login fresh independently via a
- * periodic reload, same technique, just self-contained.
+ * use of the same profile dir. It's not a separate LOGIN though: it borrows
+ * the session cookie TrafikverketCookieRefresh already keeps warm in
+ * config.json (every 20 min), injecting it into this profile on launch and
+ * again on every self-refresh cycle. So this only ever needs its own
+ * interactive BankID login if that shared session has also fully lapsed -
+ * not independently, on its own schedule.
  *
  * Run directly (or via the hidden VBScript wrapper / scheduled task - see
  * README) - stays running, listening on Discord's Gateway (outbound
@@ -43,6 +47,33 @@ let page;
 
 function isLoggedIn(cookies) {
   return cookies.some((c) => c.name === "FpsExternalIdentity");
+}
+
+// TrafikverketCookieRefresh already keeps a valid session cookie in
+// config.json, refreshed every 20 min - reusing it here means this profile
+// only ever needs its OWN independent BankID login if that shared session
+// has also fully lapsed, instead of maintaining a second, separate login.
+// Re-reads config.json fresh every call (not the module-load-time `cfg`)
+// since it changes on disk while this listener stays running for days.
+function loadCurrentSessionCookies() {
+  let liveCfg;
+  try {
+    liveCfg = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+  } catch (err) {
+    console.error("Couldn't re-read config.json for cookie injection:", err.message);
+    return [];
+  }
+  return (liveCfg.cookie || "")
+    .split(";")
+    .map((pair) => {
+      const idx = pair.indexOf("=");
+      if (idx === -1) return null;
+      const name = pair.slice(0, idx).trim();
+      const value = pair.slice(idx + 1).trim();
+      if (!name) return null;
+      return { name, value, domain: "fp.trafikverket.se", path: "/" };
+    })
+    .filter(Boolean);
 }
 
 function watchForManualClose(ctx) {
@@ -85,11 +116,16 @@ async function ensureBrowserReadyInner() {
   // the module-level context/page (and the close-watcher) only get set
   // once, on whichever one survives below.
   let ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, args: OFFSCREEN_ARGS });
+  await ctx.addCookies(loadCurrentSessionCookies());
   let pg = ctx.pages()[0] || (await ctx.newPage());
   await pg.goto(BOOKING_URL);
 
   let cookies = await ctx.cookies();
   if (!isLoggedIn(cookies)) {
+    // Both the borrowed cookie (just injected above) and whatever this
+    // profile had saved on its own are missing/expired - the shared
+    // session has also fully lapsed, so there's no way around a real,
+    // interactive BankID login this time.
     console.log("Not logged in on the dedicated manual-open profile - relaunching visibly for BankID login...");
     await ctx.close();
     // Chromium persists window bounds per-profile - without explicitly
@@ -128,6 +164,10 @@ async function ensureBrowserReadyInner() {
 
   setInterval(async () => {
     try {
+      // Pull in whatever CookieRefresh most recently obtained too, not just
+      // this profile's own reload-based extension - keeps this one in sync
+      // even across a very long-running session.
+      await context.addCookies(loadCurrentSessionCookies());
       await page.reload();
       console.log("Self-refreshed manual-open browser session.");
     } catch (err) {
